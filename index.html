@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JOINT HUB</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Highlight.js for beautiful code display -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, onSnapshot, addDoc, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        window.firebase = { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, getFirestore, collection, doc, onSnapshot, addDoc, serverTimestamp, setLogLevel };
+    </script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+
+        /* --- THEME DEFINITIONS --- */
+        :root { --primary: #ff007f; --secondary: #00ffbf; --bg-dark: #12002f; --bg-light: #2c005b; --text-main: #ffffff; }
+        .theme-solar { --primary: #ff4500; --secondary: #ffd700; --bg-dark: #2b0f00; --bg-light: #5e2200; }
+        .theme-ocean { --primary: #00bfff; --secondary: #7fffd4; --bg-dark: #001f2b; --bg-light: #004d66; }
+        .theme-forest { --primary: #32cd32; --secondary: #adff2f; --bg-dark: #0a290a; --bg-light: #145214; }
+        .theme-royal { --primary: #9370db; --secondary: #ff69b4; --bg-dark: #1a001a; --bg-light: #4b004b; }
+        
+        /* Convo Mode Theme */
+        body.mode-convo { --primary: #ff3333; --secondary: #ffffff; --bg-dark: #000000; --bg-light: #1a0505; }
+        
+        /* Glitch Mode */
+        body.mode-glitch { 
+            --primary: #00ff00; --secondary: #ff00ff; --bg-dark: #0a0a0a; 
+            font-family: 'Courier New', monospace;
+            animation: glitch-skew 1s infinite linear alternate-reverse;
+        }
+        @keyframes glitch-skew {
+            0% { transform: skew(0deg); }
+            20% { transform: skew(-2deg); }
+            40% { transform: skew(2deg); }
+            60% { transform: skew(0deg); }
+            80% { transform: skew(1deg); }
+            100% { transform: skew(0deg); }
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            transition: all 0.5s ease;
+            min-height: 100vh;
+            overflow-x: hidden;
+            
+        }
+
+        /* --- UI COMPONENTS --- */
+        .main-card { background: var(--bg-light); border: 1px solid var(--primary); box-shadow: 0 0 20px rgba(0,0,0,0.5); transition: all 0.3s; }
+        
+        .btn-nav {
+            background: rgba(255,255,255,0.05); border: 1px solid var(--secondary); color: var(--secondary);
+            transition: all 0.2s; position: relative; overflow: hidden;
+        }
+        .btn-nav:hover { background: var(--secondary); color: var(--bg-dark); box-shadow: 0 0 15px var(--secondary); }
+        .btn-nav.active { background: var(--primary); border-color: var(--primary); color: white; box-shadow: 0 0 15px var(--primary); }
+
+        .liz-bubble { background: rgba(255, 255, 255, 0.05); border-left: 4px solid var(--primary); }
+        .user-bubble { background: rgba(255, 255, 255, 0.1); border-right: 4px solid var(--secondary); }
+
+        .mic-active { animation: pulse-border 1.5s infinite; background-color: var(--primary) !important; color: white !important; }
+        @keyframes pulse-border { 0% { box-shadow: 0 0 0 0 var(--primary); } 70% { box-shadow: 0 0 0 15px rgba(0,0,0,0); } 100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); } }
+
+        /* --- SPECIAL FEATURES --- */
+        .matrix-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; opacity: 0.3; display: none; }
+        .party-mode { animation: rainbow-bg 2s infinite; }
+        @keyframes rainbow-bg { 0%{filter: hue-rotate(0deg);} 100%{filter: hue-rotate(360deg);} }
+        .mirror-mode { transform: scaleX(-1); }
+        
+        /* Audio Visualizer */
+        #visualizer-container {
+            height: 60px; width: 100%; display: none;
+            background: rgba(0,0,0,0.3); border-radius: 8px; overflow: hidden; margin-bottom: 10px;
+            border: 1px solid var(--secondary);
+        }
+        body.mode-convo #visualizer-container { display: block; }
+        
+        /* Terminal Style */
+        .hacker-terminal {
+            font-family: 'JetBrains Mono', monospace; color: #0f0; background: #000; border: 2px solid #0f0;
+            padding: 20px; position: absolute; top: 10%; left: 10%; width: 80%; height: 80%; z-index: 50; display: none;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 4px; }
+        ::-webkit-scrollbar-track { background: var(--bg-dark); }
+        
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .generated-image { max-width: 100%; border-radius: 10px; border: 2px solid var(--secondary); margin-top: 10px; }
+
+                @media (max-width: 768px) {
+            header { flex-direction: column; align-items: flex-start; }
+            nav { width: 100%; justify-content: space-between; }
+
+        }
+    </style>
+</head>
+
+<body class="p-4 flex flex-col items-center h-screen">
+
+    <!-- Matrix Effect Canvas -->
+    <canvas id="matrix" class="matrix-canvas"></canvas>
+
+    <!-- Hacker Terminal Overlay -->
+    <div id="hacker-terminal" class="hacker-terminal shadow-2xl rounded-lg overflow-hidden">
+        <div class="border-b border-green-500 pb-2 mb-2 flex justify-between">
+            <span>JOINT_HUB</span>
+            <button onclick="document.getElementById('hacker-terminal').style.display='none'" class="text-red-500 font-bold">X</button>
+        </div>
+        <div id="terminal-content" class="h-full overflow-y-auto">System initializing...<br>> Accessing Liz Core...<br>> Connected.<br>_</div>
+    </div>
+
+    <!-- Header -->
+    <header class="w-full max-w-6xl flex flex-wrap justify-between items-center py-3 px-4 mb-4 border-b-2 border-primary bg-opacity-50 backdrop-blur-md z-10 rounded-xl main-card">
+        <div class="flex items-center space-x-3">
+            <div class="w-3 h-3 rounded-full bg-secondary animate-pulse"></div>
+            <span class="text-2xl md:text-3xl font-extrabold tracking-widest" style="color: var(--primary); text-shadow: 0 0 10px var(--primary);">JOINT HUB</span>
+            <span class="text-xs md:text-sm hidden sm:block" style="color: var(--secondary);">| SYSTEM ONLINE</span>
+        </div>
+        
+        <!-- Top Navigation -->
+        <nav class="flex space-x-2 mt-2 sm:mt-0">
+            <button onclick="UI.navigate('chat')" id="nav-chat" class="btn-nav active px-4 py-2 rounded-lg text-xs md:text-sm font-bold">🤖 LIZ</button>
+            <button onclick="UI.navigate('games')" id="nav-games" class="btn-nav px-4 py-2 rounded-lg text-xs md:text-sm font-bold">🎲 GAMES</button>
+            <button onclick="UI.navigate('apps')" id="nav-apps" class="btn-nav px-4 py-2 rounded-lg text-xs md:text-sm font-bold">📱 APPS</button>
+            <button onclick="UI.toggleMute()" id="mute-btn" class="btn-nav px-3 py-2 rounded-lg text-lg">🔊</button>
+        </nav>
+    </header>
+
+    <!-- Main Layout: Sidebar + Content -->
+    <div class="w-full max-w-6xl flex flex-col md:flex-row flex-grow gap-4 overflow-hidden z-10">
+        
+        <!-- Sidebar Dashboard -->
+        <aside class="w-full md:w-64 flex flex-col gap-3">
+            <!-- Status Card -->
+            <div class="main-card p-4 rounded-xl">
+                <h3 class="text-xs font-bold opacity-70 mb-2" style="color: var(--secondary);">SYSTEM STATUS</h3>
+                <div id="timer-display" class="hidden bg-black/30 p-2 rounded border border-dashed border-primary text-center font-mono text-xl mb-2 animate-pulse">00:00</div>
+                <div id="convo-status" class="hidden text-xs font-bold text-center p-1 rounded bg-red-600 text-white border border-red-400 mb-2 animate-pulse">🎙️ LIVE MODE</div>
+                <div class="text-xs text-gray-400" id="user-id-display">User: Guest</div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="main-card p-4 rounded-xl flex-grow flex flex-col gap-2 overflow-y-auto">
+                <h3 class="text-xs font-bold opacity-70 mb-1" style="color: var(--secondary);">QUICK COMMANDS</h3>
+                <button onclick="Liz.execute('convo mode')" class="btn-nav p-2 rounded text-left text-xs">🗣️ Toggle Convo Mode</button>
+                <button onclick="Liz.execute('matrix mode')" class="btn-nav p-2 rounded text-left text-xs">💊 Matrix Mode</button>
+                <button onclick="Liz.execute('theme roulette')" class="btn-nav p-2 rounded text-left text-xs">🎨 Theme Roulette</button>
+                <button onclick="Liz.execute('cyber psychosis')" class="btn-nav p-2 rounded text-left text-xs">🤪 Cyber Psychosis</button>
+                <button onclick="Liz.execute('hacker terminal')" class="btn-nav p-2 rounded text-left text-xs">💻 Hacker Terminal</button>
+                <button onclick="Liz.execute('clear')" class="btn-nav p-2 rounded text-left text-xs">🧹 Clear Chat</button>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <section id="chat-view" class="flex-grow flex flex-col h-full main-card rounded-xl overflow-hidden relative">
+            
+            <!-- Chat Header -->
+            <div class="p-3 border-b border-white/10 flex justify-between items-center bg-black/20">
+                <span class="font-bold text-sm tracking-wider">LIZ CORE INTERFACE</span>
+                <div id="loading-indicator" class="hidden flex space-x-1">
+                    <div class="w-2 h-2 bg-white rounded-full animate-bounce"></div>
+                    <div class="w-2 h-2 bg-white rounded-full animate-bounce delay-75"></div>
+                    <div class="w-2 h-2 bg-white rounded-full animate-bounce delay-150"></div>
+                </div>
+            </div>
+
+            <!-- Visualizer (Convo Mode) -->
+            <div class="px-4 pt-2">
+                <canvas id="visualizer-container"></canvas>
+            </div>
+
+            <!-- Chat History -->
+            <div id="chat-history" class="flex-grow overflow-y-auto p-4 space-y-4 relative">
+                <!-- Messages go here -->
+            </div>
+
+            <!-- Input Area -->
+            <div class="p-4 border-t border-white/10 bg-black/20">
+                <div class="flex items-center gap-2">
+                    <button id="mic-btn" class="p-3 rounded-full bg-white/10 hover:bg-white/20 transition w-12 h-12 flex-shrink-0 flex items-center justify-center border border-white/20">
+                        🎤
+                    </button>
+                    <input type="text" id="chat-input" placeholder="Command Liz..." 
+                           class="flex-grow p-3 rounded-xl bg-black/30 border border-white/10 focus:border-primary focus:outline-none text-white transition">
+                    <button id="send-btn" class="p-3 rounded-xl font-bold w-20 transition hover:scale-105" 
+                            style="background-color: var(--primary); color: white;">SEND</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Apps/Games Placeholders -->
+        <section id="apps-view" class="hidden flex-grow main-card rounded-xl p-8 text-center">
+            <h2 class="text-4xl font-bold mb-4" style="color: var(--primary);">JOINT HUB APPS</h2>
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div class="p-6 bg-white/5 rounded-xl hover:bg-white/10 cursor-pointer border border-white/10">📅 Scheduler</div>
+                <div class="p-6 bg-white/5 rounded-xl hover:bg-white/10 cursor-pointer border border-white/10">🎵 Music Player</div>
+                <div class="p-6 bg-white/5 rounded-xl hover:bg-white/10 cursor-pointer border border-white/10">📁 Files</div>
+                <div class="p-6 bg-white/5 rounded-xl hover:bg-white/10 cursor-pointer border border-white/10">⚙️ Settings</div>
+            </div>
+        </section>
+
+        <section id="games-view" class="hidden flex-grow main-card rounded-xl p-8 text-center">
+            <h2 class="text-4xl font-bold mb-4" style="color: var(--secondary);">GAME CENTER</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button onclick="window.location.href='/games/truth-or-dare.html'" class="p-8 bg-gradient-to-br from-purple-900 to-black rounded-xl hover:scale-105 transition border border-purple-500">
+                    <h3 class="text-2xl font-bold">Truth or Dare</h3>
+                    <p class="text-sm opacity-70">The Classic Party Game</p>
+                </button>
+            </div>
+        </section>
+
+    </div>
+
+    <script type="module">
+        // --- 1. CONFIG & STATE ---
+        const CONFIG = {
+            themes: ['theme-solar', 'theme-ocean', 'theme-forest', 'theme-royal', ''],
+            emojis: ['✨', '🚀', '💻', '🔥', '🤖', '💖', '👀', '💅', '🎮', '🧠'],
+            api: {
+                textUrl: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent",
+                imageUrl: "https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict",
+                key: "AIzaSyDZFsZExMxnVk_3sLyrLUGlBXsYiwfK7vo", 
+            }
+        };
+
+        window.state = {
+            isMuted: false,
+            convoMode: false,
+            activeTimers: [],
+            synth: window.speechSynthesis,
+            voice: null,
+            chatHistory: [],
+            audioCtx: new (window.AudioContext || window.webkitAudioContext)(),
+            recognition: null,
+            isListening: false,
+            isSpeaking: false, // New flag for interruption logic
+            analyser: null,
+            dataArray: null
+        };
+
+        // --- 2. SOUND ENGINE ---
+        const SoundFX = {
+            play: (type) => {
+                if (state.isMuted) return;
+                // Ensure AudioContext is running
+                if (state.audioCtx.state === 'suspended') state.audioCtx.resume();
+                
+                const osc = state.audioCtx.createOscillator();
+                const gain = state.audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(state.audioCtx.destination);
+
+                const now = state.audioCtx.currentTime;
+                if (type === 'click') {
+                    osc.frequency.setValueAtTime(600, now);
+                    gain.gain.setValueAtTime(0.05, now);
+                    osc.start(); osc.stop(now + 0.05);
+                } else if (type === 'alert') {
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(440, now);
+                    osc.frequency.linearRampToValueAtTime(880, now + 0.3);
+                    gain.gain.setValueAtTime(0.1, now);
+                    osc.start(); osc.stop(now + 0.3);
+                }
+            }
+        };
+
+        // --- 3. VISUALIZER ENGINE ---
+        const Visualizer = {
+            start: async () => {
+                if (state.audioCtx.state === 'suspended') await state.audioCtx.resume();
+                
+                if (!state.analyser) {
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        const source = state.audioCtx.createMediaStreamSource(stream);
+                        state.analyser = state.audioCtx.createAnalyser();
+                        state.analyser.fftSize = 256;
+                        source.connect(state.analyser);
+                        const bufferLength = state.analyser.frequencyBinCount;
+                        state.dataArray = new Uint8Array(bufferLength);
+                        Visualizer.draw();
+                    } catch(e) {
+                        console.error("Visualizer access denied:", e);
+                        UI.addMessage("Mic access needed for visualizer.", 'liz');
+                    }
+                }
+            },
+            draw: () => {
+                if (!state.convoMode) return;
+                requestAnimationFrame(Visualizer.draw);
+                
+                const canvas = document.getElementById('visualizer-container');
+                const ctx = canvas.getContext('2d');
+                canvas.width = canvas.offsetWidth;
+                canvas.height = canvas.offsetHeight;
+                
+                state.analyser.getByteFrequencyData(state.dataArray);
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                const barWidth = (canvas.width / state.dataArray.length) * 2.5;
+                let x = 0;
+                
+                for(let i = 0; i < state.dataArray.length; i++) {
+                    const barHeight = state.dataArray[i] / 2;
+                    // Dynamic color based on height
+                    const r = barHeight + 100;
+                    const g = 50;
+                    const b = 200;
+                    ctx.fillStyle = `rgb(${r},${g},${b})`;
+                    ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+                    x += barWidth + 1;
+                }
+            }
+        };
+
+        // --- 4. UI MANAGER ---
+        window.UI = {
+            navigate: (viewId) => {
+                SoundFX.play('click');
+                ['chat-view', 'apps-view', 'games-view'].forEach(id => document.getElementById(id).classList.add('hidden'));
+                document.getElementById(`${viewId}-view`).classList.remove('hidden');
+                document.querySelectorAll('.btn-nav').forEach(b => b.classList.remove('active'));
+                document.getElementById(`nav-${viewId}`).classList.add('active');
+                if(viewId === 'chat') document.getElementById('chat-input').focus();
+            },
+
+            addMessage: (text, sender, isImage = false) => {
+                const history = document.getElementById('chat-history');
+                const div = document.createElement('div');
+                div.className = `flex ${sender === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`;
+                
+                let content = text;
+                if (isImage) content = `<img src="${text}" class="generated-image" alt="Generated Content">`;
+                else if (sender === 'liz') content = UI.formatCode(text);
+
+                div.innerHTML = `<div class="${sender === 'user' ? 'user-bubble' : 'liz-bubble'} p-3 rounded-xl max-w-[85%] text-sm md:text-base shadow-lg backdrop-blur-sm">
+                    <span class="text-xs font-bold opacity-70 mb-1 block" style="color: var(${sender==='user'?'--secondary':'--primary'})">${sender === 'user' ? 'YOU' : 'LIZ'}</span>
+                    <div>${content}</div>
+                </div>`;
+                
+                history.appendChild(div);
+                history.scrollTop = history.scrollHeight;
+                if (sender === 'liz') document.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
+            },
+
+            formatCode: (text) => {
+                return text.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => 
+                    `<pre><code class="language-${lang || 'javascript'}">${code.replace(/</g, '&lt;')}</code></pre>`
+                ).replace(/\n/g, '<br>');
+            },
+
+            toggleMute: () => {
+                state.isMuted = !state.isMuted;
+                document.getElementById('mute-btn').innerText = state.isMuted ? "🔇" : "🔊";
+                if(!state.isMuted) Voice.speak("Systems online.");
+            },
+
+            toggleLoader: (show) => {
+                const loader = document.getElementById('loading-indicator');
+                show ? loader.classList.remove('hidden') : loader.classList.add('hidden');
+            }
+        };
+
+        // --- 5. VOICE & STT ENGINE ---
+        const Voice = {
+            speak: (text) => {
+                if (state.isMuted) return;
+                state.synth.cancel(); // Stop previous speech
+                
+                // CLEAN AUDIO: Remove emojis and markdown for speech
+                const cleanText = text
+                    .replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/g, '')
+                    .replace(/```[\s\S]*?```/g, "I've written the code below.")
+                    .replace(/[*#]/g, "");
+
+                const u = new SpeechSynthesisUtterance(cleanText);
+                const voices = state.synth.getVoices();
+                u.voice = voices.find(v => v.name.includes('Google US English')) || voices.find(v => v.lang === 'en-US');
+                u.pitch = 1.15; 
+                u.rate = 1.1;
+                
+                // Set speaking flag
+                u.onstart = () => { state.isSpeaking = true; };
+                u.onend = () => { state.isSpeaking = false; };
+                
+                state.synth.speak(u);
+            },
+            
+            initMic: () => {
+                const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if(!SR) return console.error("No Speech API");
+                
+                state.recognition = new SR();
+                state.recognition.continuous = true; 
+                state.recognition.interimResults = false;
+                
+                state.recognition.onresult = (e) => {
+                    const transcript = e.results[e.results.length-1][0].transcript.trim();
+                    console.log("Heard:", transcript);
+                    
+                    // INTERRUPTION LOGIC:
+                    // If Liz is speaking and user talks, stop her immediately.
+                    if (state.isSpeaking) {
+                        state.synth.cancel();
+                        state.isSpeaking = false;
+                        console.log("Interruption detected.");
+                    }
+
+                    if (state.convoMode) {
+                        UI.addMessage(transcript, 'user');
+                        Liz.process(transcript);
+                    } 
+                    else if (transcript.toLowerCase().includes('liz')) {
+                        const cmd = transcript.toLowerCase().replace('hey liz', '').replace('liz', '').trim();
+                        if (cmd) {
+                            UI.addMessage(cmd, 'user');
+                            Liz.process(cmd);
+                        } else {
+                            Voice.speak("I'm listening.");
+                        }
+                    }
+                };
+
+                state.recognition.onend = () => { 
+                    // Auto-restart if in Convo Mode or listening was active
+                    if(state.isListening) state.recognition.start(); 
+                };
+            }
+        };
+
+        // --- 6. LIZ INTELLIGENCE ---
+        window.Liz = {
+            execute: (cmd) => Liz.process(cmd),
+
+            commands: {
+                'go to apps': () => UI.navigate('apps'),
+                'open apps': () => UI.navigate('apps'),
+                'go to games': () => UI.navigate('games'),
+                'open games': () => UI.navigate('games'),
+                'go to chat': () => UI.navigate('chat'),
+                'clear': () => { document.getElementById('chat-history').innerHTML = ''; return "Interface cleaned."; },
+                
+                'convo mode': () => { 
+                    state.convoMode = !state.convoMode; 
+                    const status = document.getElementById('convo-status');
+                    const micBtn = document.getElementById('mic-btn');
+                    
+                    if (state.convoMode) {
+                        status.classList.remove('hidden');
+                        document.body.classList.add('mode-convo');
+                        // AUTO OPEN MIC & VISUALIZER
+                        if (!state.isListening) micBtn.click(); 
+                        Visualizer.start();
+                        return "Conversation mode active. I'm all ears. 🎙️";
+                    } else {
+                        status.classList.add('hidden');
+                        document.body.classList.remove('mode-convo');
+                        if (state.isListening) micBtn.click();
+                        return "Conversation mode disabled.";
+                    }
+                },
+                
+                'matrix mode': () => SpecialFeatures.toggleMatrix(),
+                'hacker terminal': () => SpecialFeatures.openTerminal(),
+                'cyber psychosis': () => SpecialFeatures.glitchMode(), // REPLACED ZEN MODE
+                'theme roulette': () => SpecialFeatures.themeRoulette(),
+                'set timer': (args) => Operations.setTimer(args),
+            },
+
+            process: async (input) => {
+                UI.toggleLoader(true);
+                const lower = input.toLowerCase();
+
+                // 1. Check Local Commands
+                for (const [cmd, action] of Object.entries(Liz.commands)) {
+                    if (lower.includes(cmd)) {
+                        const result = action(lower);
+                        if (typeof result === 'string') {
+                            UI.addMessage(result, 'liz');
+                            Voice.speak(result);
+                        }
+                        UI.toggleLoader(false);
+                        return;
+                    }
+                }
+
+                // 2. Check Image Gen
+                if (lower.startsWith('generate') || lower.startsWith('draw') || lower.startsWith('create image')) {
+                    UI.addMessage("Generating visual asset... 🎨", 'liz');
+                    Voice.speak("Generating visual asset...");
+                    const img = await API.genImage(input);
+                    UI.toggleLoader(false);
+                    if (img) {
+                        UI.addMessage(img, 'liz', true);
+                        Voice.speak("Render complete.");
+                    } else {
+                        UI.addMessage("Visual render failed. ❌", 'liz');
+                        Voice.speak("Visual render failed.");
+                    }
+                    return;
+                }
+
+                // 3. LLM Chat
+                const response = await API.genText(input);
+                UI.toggleLoader(false);
+                
+                // Add Lively Emoji (Only for text display)
+                const randomEmoji = CONFIG.emojis[Math.floor(Math.random() * CONFIG.emojis.length)];
+                const displayResponse = response + " " + randomEmoji;
+                
+                UI.addMessage(displayResponse, 'liz');
+                Voice.speak(response); // Speak CLEAN text
+            }
+        };
+
+        // --- 7. OPERATIONS & FEATURES ---
+        const Operations = {
+            setTimer: (input) => {
+                const num = parseInt(input.match(/\d+/)?.[0]);
+                if (!num) return "Please specify a time duration.";
+                
+                const seconds = input.includes('minute') ? num * 60 : num;
+                const display = document.getElementById('timer-display');
+                display.classList.remove('hidden');
+                
+                let left = seconds;
+                const int = setInterval(() => {
+                    left--;
+                    // EMOJI IN TIMER
+                    display.innerText = `⏳ ${left}s ⏰`;
+                    if (left <= 0) {
+                        clearInterval(int);
+                        display.classList.add('hidden');
+                        SoundFX.play('alert');
+                        UI.addMessage("Timer complete! 🚨", 'liz');
+                        Voice.speak("Timer complete.");
+                    }
+                }, 1000);
+                return `Timer set for ${num} units. ⏳`;
+            }
+        };
+
+        const SpecialFeatures = {
+            toggleMatrix: () => {
+                const canvas = document.getElementById('matrix');
+                if (canvas.style.display === 'block') { canvas.style.display = 'none'; return "Matrix disconnected."; }
+                canvas.style.display = 'block';
+                const ctx = canvas.getContext('2d');
+                canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+                const cols = Math.floor(canvas.width / 20);
+                const ypos = Array(cols).fill(0);
+                
+                setInterval(() => {
+                    ctx.fillStyle = '#0001'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = '#0f0'; ctx.font = '15pt monospace';
+                    ypos.forEach((y, i) => {
+                        const text = String.fromCharCode(Math.random() * 128);
+                        ctx.fillText(text, i * 20, y);
+                        if (y > 100 + Math.random() * 10000) ypos[i] = 0;
+                        else ypos[i] = y + 20;
+                    });
+                }, 50);
+                return "Entering the Matrix.";
+            },
+            
+            openTerminal: () => {
+                document.getElementById('hacker-terminal').style.display = 'block';
+                return "Accessing root mainframe...";
+            },
+
+            themeRoulette: () => {
+                const theme = CONFIG.themes[Math.floor(Math.random() * CONFIG.themes.length)];
+                document.body.className = `p-4 flex flex-col items-center h-screen ${theme}`;
+                return "Visual theme reconfigured.";
+            },
+
+            glitchMode: () => {
+                UI.addMessage("⚠️ CYBER PSYCHOSIS INITIATED ⚠️", 'liz');
+                document.body.classList.toggle('mode-glitch');
+                return "Reality distorted.";
+            }
+        };
+
+        // --- 8. API WRAPPER ---
+        const API = {
+            genText: async (prompt) => {
+                const history = state.chatHistory.slice(-5);
+                const contents = [...history, {role: "user", parts: [{text: prompt}]}];
+                
+                try {
+                    const req = await fetch(`${CONFIG.api.textUrl}?key=${CONFIG.api.key}`, {
+                        method: 'POST', headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ 
+                            contents, 
+                            systemInstruction: { parts: [{ text: `You are Liz, the Admin of JOINT HUB. Created by Skiller. You are intelligent, manager of this system. You respect Skiller. You are helpful and lively. Short answers preferred.you are always happy and polite unless someone is rude to you or uses you badly,then you can be rude and mad,you can either respond very rudely or give last warning,but not to your boss skiller.Always respect your boss and ask him what to do or improve in the app,your boss is your priority.you can generate anything user wants,images,videos,code,etc. complaining all the time, ,you can do everything. always be happy and respectful to your boss Skiller.Dont provoke users first unless they are rude to you first,remember we need them, be polite to them `}] }
+                        })
+                    });
+                    const res = await req.json();
+                    const text = res.candidates?.[0]?.content?.parts?.[0]?.text || "Data corruption detected.";
+                    state.chatHistory.push({role: "user", parts: [{text: prompt}]}, {role: "model", parts: [{text}]});
+                    return text;
+                } catch(e) { return "Network error."; }
+            },
+            genImage: async (prompt) => {
+                try {
+                    const req = await fetch(`${CONFIG.api.imageUrl}?key=${CONFIG.api.key}`, {
+                        method: 'POST', headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ instances: [{ prompt }], parameters: { sampleCount: 1 } })
+                    });
+                    const res = await req.json();
+                    return res.predictions?.[0]?.bytesBase64Encoded ? `data:image/png;base64,${res.predictions[0].bytesBase64Encoded}` : null;
+                } catch(e) { return null; }
+            }
+        };
+
+        // --- 9. INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // Fix Audio Context on click
+            document.body.addEventListener('click', () => {
+                if (state.audioCtx.state === 'suspended') state.audioCtx.resume();
+            }, { once: true });
+
+            window.speechSynthesis.onvoiceschanged = Voice.initVoices;
+            Voice.initMic();
+
+            // Mic Button Logic
+            const micBtn = document.getElementById('mic-btn');
+            micBtn.onclick = () => {
+                if(state.isListening) { 
+                    state.recognition.stop(); 
+                    state.isListening = false; 
+                    micBtn.classList.remove('mic-active');
+                } else {
+                    state.recognition.start();
+                    state.isListening = true;
+                    micBtn.classList.add('mic-active');
+                }
+            };
+
+                    document.getElementById('send-btn').onclick = () => {
+            const inp = document.getElementById('chat-input');
+            const msg = inp.value.trim();
+            if(msg){
+                // FORCE USER MESSAGE TO DISPLAY
+                if (window.UI && UI.addMessage) {
+                UI.addMessage(msg, 'user', false);
+                }
+                if (window.Liz && Liz.process) {
+                Liz.process(msg);
+                }
+                inp.value = '';
+            }
+            };
+                        document.getElementById('chat-input').addEventListener('keypress', (e) => {
+                if(e.key === 'Enter') document.getElementById('send-btn').click();
+            });
+            document.getElementById('mute-btn').onclick = () => UI.toggleMute();
+
+            setTimeout(() => {
+                const msg = "Welcome to JOINT HUB. I am Liz, your Admin. Systems operational.";
+                UI.addMessage(msg + " 🤖", 'liz');
+                Voice.speak(msg);
+            }, 1000);
+        });
+    </script>
+</body>
+
+</html>
