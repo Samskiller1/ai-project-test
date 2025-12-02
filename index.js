@@ -6,7 +6,7 @@
             api: {
                 textUrl: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent",
                 imageUrl: "https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict",
-                key: "AIzaSyDZFsZExMxnVk_3sLyrLUGlBXsYiwfK7vo", 
+                key: "AIzaSyC8oc4jqU4jJmuYX5F6_uPPre8KuKUZ3XQ", 
             }
         };
 
