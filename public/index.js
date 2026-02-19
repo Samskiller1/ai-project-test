@@ -353,6 +353,8 @@ window.Liz = {
              SoundFX.play('alert');
              UI.addMessage(response + " 💀", 'liz');
              Voice.speak("A critical system error occurred.");
+            console.log("Raw API response:", response);
+
              return;
         }
 
@@ -619,4 +621,5 @@ document.addEventListener('DOMContentLoaded', () => {
             Voice.speak(msg);
         }, 1000);
     }
+
 });
