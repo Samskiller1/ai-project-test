@@ -50,7 +50,7 @@ app.post("/api/generate-text", async (req, res) => {
             systemInstruction?.parts?.[0]?.text || "";
 
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-1.5-flash",
             contents,
             config: {
                 systemInstruction: systemText,
@@ -117,3 +117,4 @@ app.post("/api/generate-image", async (req, res) => {
         const base64Image = imagePart.inlineData.data;
 
         return res.json(
+
